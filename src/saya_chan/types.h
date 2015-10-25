@@ -277,13 +277,37 @@ enum Piece {
     PIECE_NONE = 32
 };
 
+// 評価関数の38要素化のために使用する駒番号
+enum PieceNumber {
+    PIECENUMBER_NONE = 0,
+    KNS_SOU = 1, // 先手玉
+    KNE_SOU = 1,
+    KNS_GOU = 2, // 後手玉
+    KNE_GOU = 2,
+    KNS_HI = 3, // 飛
+    KNE_HI = 4,
+    KNS_KA = 5, // 角
+    KNE_KA = 6,
+    KNS_KI = 7, // 金
+    KNE_KI = 10,
+    KNS_GI = 11, // 銀
+    KNE_GI = 14,
+    KNS_KE = 15, // 桂
+    KNE_KE = 18,
+    KNS_KY = 19, // 香車
+    KNE_KY = 22,
+    KNS_FU = 23, // 歩
+    KNE_FU = 40,
+    PIECENUMBER_MIN = KNS_HI,
+    PIECENUMBER_MAX = KNE_FU
+};
+
 enum Color {
     BLACK, WHITE, COLOR_NONE
 };
 
 typedef uint8_t PieceKind_t;       // 駒種類
-typedef uint8_t PieceNumber_t;     // 駒番号
-#define MAX_PIECENUMBER    40
+#define NLIST	           38
 
 // 利きの定義
 typedef uint32_t effect_t;
@@ -601,48 +625,6 @@ enum KPP{
     fe_end = e_dragon + 81
 };
 
-//pieceをkppのindexに変換
-const KPP aikpp0[32] = {
-    none, f_pawn, f_lance, f_knight, f_silver, f_gold, f_bishop, f_rook,
-    none, f_gold, f_gold, f_gold, f_gold, none, f_horse, f_dragon,
-    none, e_pawn, e_lance, e_knight, e_silver, e_gold, e_bishop, e_rook,
-    none, e_gold, e_gold, e_gold, e_gold, none, e_horse, e_dragon
-};
-//pieceをkppのindexに変換
-const KPP aikpp1[32] = {
-    none, e_pawn, e_lance, e_knight, e_silver, e_gold, e_bishop, e_rook,
-    none, e_gold, e_gold, e_gold, e_gold, none, e_horse, e_dragon,
-    none, f_pawn, f_lance, f_knight, f_silver, f_gold, f_bishop, f_rook,
-    none, f_gold, f_gold, f_gold, f_gold, none, f_horse, f_dragon
-};
-//pieceをkpp_handのindexに変換
-const KPP aihand0[32] = {
-    none, f_hand_pawn, f_hand_lance, f_hand_knight,
-    f_hand_silver, f_hand_gold, f_hand_bishop, f_hand_rook,
-    none, none, none, none, none, none, none, none,
-    none, e_hand_pawn, e_hand_lance, e_hand_knight,
-    e_hand_silver, e_hand_gold, e_hand_bishop, e_hand_rook,
-    none, none, none, none, none, none, none, none
-};
-//pieceをkpp_handのindexに変換
-const KPP aihand1[32] = {
-    none, e_hand_pawn, e_hand_lance, e_hand_knight,
-    e_hand_silver, e_hand_gold, e_hand_bishop, e_hand_rook,
-    none, none, none, none, none, none, none, none,
-    none, f_hand_pawn, f_hand_lance, f_hand_knight,
-    f_hand_silver, f_hand_gold, f_hand_bishop, f_hand_rook,
-    none, none, none, none, none, none, none, none
-};
-//駒番号numをpiecetypeに変換
-const PieceType knpt[41] = {
-    OU, OU, HI, HI, KA, KA,
-    KI, KI, KI, KI, GI, GI, GI, GI,
-    KE, KE, KE, KE, KY, KY, KY, KY,
-    FU, FU, FU, FU, FU, FU, FU, FU, FU,
-    FU, FU, FU, FU, FU, FU, FU, FU, FU
-};
-
-
 /// Score enum keeps a midgame and an endgame value in a single
 /// integer (enum), first LSB 16 bits are used to store endgame
 /// value, while upper bits are used for midgame value. Compiler
@@ -674,6 +656,7 @@ inline void operator/= (T& d, int i) { d = T(int(d) / i); }
 ENABLE_OPERATORS_ON(Value)
 ENABLE_OPERATORS_ON(PieceType)
 ENABLE_OPERATORS_ON(Piece)
+ENABLE_OPERATORS_ON(PieceNumber)
 ENABLE_OPERATORS_ON(Color)
 ENABLE_OPERATORS_ON(Depth)
 ENABLE_OPERATORS_ON(Square)
@@ -911,15 +894,20 @@ inline Square pawn_push(Color c) {
 #if defined(NANOHA)
 
 #define MAX_CHECKS        128        // 王手の最大数
-#define MAX_EVASION        128        // 王手回避の最大数
+#define MAX_EVASION       128        // 王手回避の最大数
 
 namespace NanohaTbl {
-    extern const short z2sq[];
     extern const int Direction[];
     extern const int KomaValue[32];        // 駒の価値
     extern const int KomaValueEx[32];    // 取られたとき(捕獲されたとき)の価値
     extern const int KomaValuePro[32];    // 成る価値
     extern const int Piece2Index[32];    // 駒の種類に変換する({と、杏、圭、全}を金と同一視)
+
+    extern const short z2sq[];
+    extern const KPP KppIndex0[32];    // pieceをkppのindexに変換
+    extern const KPP KppIndex1[32];    // pieceをkppのindexに変換
+    extern const KPP HandIndex0[32];   // kpp_handのindexに変換
+    extern const KPP HandIndex1[32];   // kpp_handのindexに変換
 }
 
 // なのはの座標系(0x11～0x99)を(0～80)に圧縮する
@@ -935,9 +923,7 @@ inline int conv_sq2z(int sq)
     return (x+1)*0x10+(y+1);
 }
 
-#if defined(_MSC_VER)
-
-#elif defined(__GNUC__)
+#if defined(__GNUC__)
 inline unsigned char _BitScanForward(unsigned long * Index, unsigned long Mask)
 {
     if (Mask == 0) return 0;
@@ -945,9 +931,9 @@ inline unsigned char _BitScanForward(unsigned long * Index, unsigned long Mask)
     return 1;
 }
 
-#define __assume(x)        // MS のコンパイラのコード生成のヒントだが、gccでは無効なため
-
-#endif    // defined(__GNUC__)
+// MS のコンパイラのコード生成のヒントだが、gccでは無効なため
+#define __assume(x) __builtin_unreachable()
+#endif // defined(__GNUC__)
 
 inline unsigned int PopCnt32(unsigned int value)
 {
